@@ -1,0 +1,463 @@
+---
+title: "Global Dashboard of Novel Carona Virus Cases"
+author: "updated"
+date: "`r Sys.Date()`"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+---
+
+```{r setup, include=FALSE}
+# Load Data 
+library(flexdashboard)
+library(tidyverse)
+library(dcl)
+library(lubridate)
+library(leaflet)
+library(leaflet.extras)
+library(sf)
+library(kableExtra)
+
+#Parameters 
+
+url_cases <- "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Confirmed.csv"
+url_deaths <- "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Deaths.csv"
+url_recovered <- "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Recovered.csv"
+
+file_location_countries <- "/Users/ChrisLeBoa/Documents/Stanford School Files /Class Files /Coterm Year/Winter Quarter/DCL/ne_50m_admin_0_countries/ne_50m_admin_0_countries.shp"
+
+#Rename Table 
+
+vars_cases <- c("cases","deaths", "recovered")
+
+vars_cases_recode <- 
+  c(
+    "active_cases" = "Active Cases",
+    "recovered" = "Recovered",
+    "cases" = "Cases Total", 
+    "deaths" = "Deaths"
+  )
+
+vars_cases_color<- 
+  c(
+    "Active Cases" = "purple",
+    "Recovered" = "dark green",
+    "Cases Total" = "orange", 
+    "Deaths" = "red"
+  )
+
+cases_colors <- 2
+
+vars_totals <-
+  c(
+    `Total Countries Infected` = "t_countries",
+    `Total Cases` = "t_cases",
+    `Total Deaths` = "t_deaths",
+    `Total Recovered` = "t_recovered",
+    `Mortality Rate %` = "av_mortality_rate"
+  )
+
+vars <-
+  c(
+    # `Countries` = "countries",
+    `Total Cases` = "t_cases",
+    `Total Deaths` = "t_deaths",
+    `Total Recovered` = "t_recovered",
+    `Active Cases` = "active_cases",
+    `Mortality Rate %` = "av_mortality_rate"
+  )
+
+vars_rename <- 
+  c(
+    province = "Province/State",
+    country = "Country/Region"
+  )
+
+country_recode <- 
+  c(
+    "Mainland China" = "China",
+    # "Hong Kong" = "China", #included Hong Kong as part of China
+    # "Taiwan" = "China",
+    .default = "Other"
+  )
+
+
+
+
+```
+
+```{r}
+#Clean data
+
+carona_datasets <- c(url_cases, url_deaths, url_recovered)
+
+#Read Cases
+cases_by_date <- 
+  read_csv(url_cases) %>% 
+  pivot_longer(
+    cols = matches("^\\d"),
+    names_to = "date",
+    values_to = "cases"
+  ) %>% 
+  mutate(date = mdy(date))
+
+# Read Deaths
+deaths_by_date <- 
+  read_csv(url_deaths) %>% 
+  pivot_longer(
+    cols = matches("^\\d"),
+    names_to = "date",
+    values_to = "deaths"
+  ) %>% 
+  mutate(date = mdy(date))
+
+#Read Recovey
+recovery_by_date <- 
+  read_csv(url_recovered) %>% 
+  pivot_longer(
+    cols = matches("^\\d"),
+    names_to = "date",
+    values_to = "recovered"
+  ) %>% 
+  mutate(date = mdy(date))
+
+#Join Tables
+carona_data <- 
+  cases_by_date %>% 
+  left_join(left_join(deaths_by_date, recovery_by_date)) %>% 
+  rename(!!vars_rename) %>% 
+  mutate(country_combined = recode(country, !!! country_recode))
+
+
+
+carona_data_totals <- 
+  carona_data %>% 
+  filter(date == max(date) & cases > 0)
+
+```
+
+
+
+Column {data-width=650}
+-----------------------------------------------------------------------
+
+
+### Total Cumulative Cases {data-height=150}
+
+```{r}
+carona_data_totals %>% 
+  summarise(
+    t_countries = n_distinct(country) - 1, #-1 bc Hong Kong Seperate in dataset + Taiwan but i am calling Taiwan an independant country 
+    t_cases = sum(cases),
+    t_deaths = sum(deaths),
+    av_mortality_rate = t_deaths / t_cases * 100,
+    t_recovered = sum(recovered)
+  ) %>% 
+  # mutate(
+  #   t_cases = call_spec(t_cases, colo)
+  # ) %>% 
+  rename(!!vars_totals) %>% 
+  knitr::kable() %>% 
+  kable_styling(font_size = 20) %>% 
+  column_spec(2:3, bold = T)
+
+#View(carona_data_totals)
+
+# mutate(
+#   car = row.names(.),
+#   mpg = cell_spec(mpg, "html", color = ifelse(mpg > 20, "red", "blue")),
+#   cyl = cell_spec(cyl, "html", color = "white", align = "c", angle = 45, 
+#                   background = factor(cyl, c(4, 6, 8), 
+#                                       c("#666666", "#999999", "#BBBBBB")))
+# )
+
+#### Try library GT for making pretty tables 
+```
+### Map of Cases By Country {data-height=650}
+```{r}
+#read in countries
+countries <- read_sf(file_location_countries)
+
+
+
+
+leaflet() %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addCircles(
+    data = carona_data_totals, 
+    # lng = Long,
+    # lat = Lat,
+    radius = ~ 1500 * sqrt(cases),
+    color = "red",
+    weight = 2,
+    fillColor = "red",
+    fillOpacity = 0.6,
+    label = 
+      ~ str_c(
+        if_else(!is.na(province), province, ""),
+        " ", country,
+        ": ", cases,
+        if_else(cases == 1, " case", " cases")),
+    
+  )
+
+summary(carona_data$province)
+
+```
+
+
+
+### Cumulative Cases By Country {data-height=250}
+
+```{r}
+country_summary_data <- 
+  carona_data_totals %>%  
+  group_by(country) %>% 
+  summarise(
+    t_cases = sum(cases),
+    t_deaths = sum(deaths),
+    t_recovered = sum(recovered)
+  ) %>% 
+  mutate(
+    active_cases = t_cases - t_deaths - t_recovered,
+    av_mortality_rate = t_deaths / t_cases * 100
+  ) %>% 
+  arrange(desc(t_deaths)) %>% 
+  rename(!!vars)
+
+country_summary_data %>% 
+  knitr::kable() %>% 
+  kable_styling(bootstrap_options = "striped", "responsive",full_width = F)
+
+
+```
+
+Column {.tabset .tabset-fade data-width=400}
+-----------------------------------------------------------------------
+
+### Cumulative Case Data
+
+```{r, fig.width=5.5, fig.height=3.7}
+#Cases by date tibble 
+carona_data_by_date <- 
+  carona_data %>%
+  group_by(date) %>% 
+  summarise_at(vars(vars_cases), sum, na.rm = TRUE) %>%
+  mutate(active_cases = cases - recovered - deaths) 
+
+#Cases by date and country tibble 
+carona_data_by_country_date <- 
+  carona_data %>%
+  group_by(country_combined, date) %>% 
+  summarise_at(vars(vars_cases), sum, na.rm = TRUE) %>%
+  mutate(active_cases = cases - recovered - deaths) 
+
+
+#Total cases by date plot
+carona_data_by_date %>%
+  pivot_longer(cols = c(cases, deaths, recovered, active_cases),
+               names_to = "case_type",
+               values_to = "number"
+  ) %>%
+  mutate(case_type = recode(case_type, !!! vars_cases_recode)) %>%  
+  ggplot(aes(x = date, y = number, color = case_type)) +
+  geom_point() +
+  geom_line() + 
+  geom_text(
+    aes(label = str_glue("{case_type}")), #Adding in {number} works but pushes this out of the table
+    data = . %>% group_by(case_type) %>% top_n(n = 1, wt = date), #weight is variable to order by
+    size = 3,
+    hjust = -0.12,
+    color = "black"
+  ) +
+  scale_x_date(
+    date_breaks = "1 week",
+    #date_breaks = seq(min(carona_data_by_date$date), max(carona_data_by_date$date), by = "1 week"),
+    date_labels = "%b %d",
+    expand = c(0, 2)
+  ) +
+  scale_y_continuous(
+    breaks = scales::breaks_width(10000),
+    labels = scales::label_number(big.mark = ",")
+  ) +
+  scale_color_manual(values = vars_cases_color) +
+  theme(legend.position = "none") +
+  coord_cartesian(
+    xlim = 
+      c(
+        min(carona_data_by_date$date),
+        max(carona_data_by_date$date) + days(7)
+      )
+  ) + 
+  labs(
+    title = "Cumulative Number of Cases by Date",
+    x = NULL, 
+    y = "Number of Total Cases"
+    #caption = "Source: John Hopkins COV-19 Database"
+  )
+
+
+# Total Cases by Date and country 
+
+carona_data_by_country_date %>% 
+  ggplot(aes(x = date, y = cases, color = country_combined)) +
+  geom_point() +
+  geom_line() +
+  scale_x_date(
+    date_breaks = "1 week",
+    date_labels = "%b %d",
+    expand = c(0, 1)
+  ) +
+  scale_y_continuous(labels = scales::label_number(big.mark = ",")) +
+  theme(legend.position = "bottom") +
+  labs(
+    title = "Total Number of Cases by Date",
+    x = NULL, 
+    y = "Number of Total Cases", 
+    color = NULL,
+    caption = "Source: John Hopkins COV-19 Database"
+  )
+```
+
+### New Cases by Date
+
+```{r, fig.width=5.5, fig.height=3.7}
+#New Cases by date 
+carona_data_by_date %>% 
+  mutate(
+    new_cases = cases - lag(cases),
+    new_recovered = recovered - lag(recovered)
+  ) %>% 
+  ggplot(aes(x = date)) +
+  #geom_col(aes(y = new_recovered), fill = "green", alpha = .5) +
+  geom_col(aes(y = new_cases), fill = "orange", alpha = .5) +
+  scale_x_date(
+    date_breaks = "1 week",
+    date_labels = "%b %d",
+    expand = c(0,.8)
+  ) +
+  scale_y_continuous(labels = scales::label_number(big.mark = ",")) +
+  labs(
+    title = "Number of New COV-19 Cases by Date",
+    x = NULL, 
+    y = "Newly Confirmed Cases", 
+    caption = "Source: John Hopkins COV-19 Database"
+  )
+
+#New Cases by Date 
+carona_data_by_country_date %>% 
+  mutate(
+    new_cases = cases - lag(cases),
+    new_recovered = recovered - lag(recovered)
+  ) %>% 
+  ggplot(aes(x = date, y = new_cases, color = country_combined)) +
+  geom_point() +
+  geom_line() +
+  scale_x_date(
+    date_breaks = "1 week",
+    date_labels = "%b %d",
+    expand = c(0,.8)
+  ) +
+  scale_y_continuous(labels = scales::label_number(big.mark = ",")) +
+  theme(legend.position = "bottom") +
+  labs(
+    title = "Number of New COV-19 Cases by Country",
+    x = NULL, 
+    y = "Newly Confirmed Cases", 
+    color = NULL,
+    caption = "Source: John Hopkins COV-19 Database"
+  )
+#add coord Cartesian # add the # of casese with str_glue 
+```
+
+### Country Information 
+
+```{r, fig.width=5.5, fig.height=3.5}
+#Countries Reporting Infections 
+carona_data %>% 
+  filter(cases > 0) %>% 
+  group_by(date) %>%
+  summarise(num_countries = n_distinct(country)) %>% 
+  ggplot(aes(date, num_countries)) +
+  geom_col(fill = "orange") +
+  scale_x_date(
+    date_breaks = "1 week",
+    date_labels = "%b %d",
+    expand = c(0,.8)
+  ) +
+  labs(
+    title = "Number of Countries Reporting Confirmed CoV cases",
+    x = NULL, 
+    y = "Number of Countries", 
+    fill = NULL,
+    caption = "Source: John Hopkins COV-19 Database"
+  )
+
+#Mortality rate by country 
+carona_data_totals %>% 
+  group_by(country) %>%
+  summarize(
+    total_country_cases = sum(cases, na.rm = TRUE),
+    total_country_deaths = sum(deaths, na.rm = TRUE),
+  ) %>% 
+  mutate(mortality_rate = total_country_deaths / total_country_cases) %>% 
+  filter(total_country_cases >= 250) %>% 
+  arrange(desc(mortality_rate)) %>% 
+  ggplot(aes(fct_reorder(country, mortality_rate, .desc = FALSE), mortality_rate)) + 
+  geom_hline(
+    aes(yintercept = sum(total_country_deaths)/sum(total_country_cases)),
+    color = "red"
+  ) +
+  geom_col() +
+  scale_y_continuous(labels = scales::label_percent()) +
+  coord_flip() +
+  labs(
+    title = "Mortality Rate by Country (Countries with > 250 Cases)",
+    y = "Crude Mortality Rate",
+    x = NULL
+  )
+```
+
+#### Information and resources
+
+
+CoV-19 is a is a novel Carona virus that was furst reported in Wuhan, China on
+January 20, 2020. 
+
+The virus is highly transmissable and spread:
+
+- Between people who are in close contact with one another (within about 6 feet).
+
+- Through respiratory droplets produced when an infected person coughs or sneezes.
+
+People infeced with the virus are most contageous when they are sick, but 
+in some cases the virus can be spread before symptoms arise
+
+The [CDC Website has more useful information](https://www.cdc.gov/coronavirus/2019-ncov/about/transmission.html)
+
+The [WHO Emergency Response site](https://experience.arcgis.com/experience/685d0ace521648f8a5beeeee1b9125cd)
+also contains information on the global response to this epidemic. 
+
+ESRI has created a similar dashboard that now requires login credentials to view
+[link](https://coronavirus-disasterresponse.hub.arcgis.com/?adumkts=marketing&aduse=public_safety&aduc=industry_manager_outreach&utm_Source=industry_manager_outreach&aduca=cra_disaster_response_program&adut=cv-outreach-redirect&adulb=multiple&adusn=multiple&aduat=arcgis_online_portal&adupt=community&sf_id=701f2000000n6XKAAY)
+
+All data for this dashboard was taken from the John's Hopkins daily CoV 
+database hosted on [humanitarian data exchange]
+(https://data.humdata.org/dataset/novel-coronavirus-2019-ncov-cases)
+
+
+The 2020 COV outbreak is an ongoing public health crisis and this dashboard will
+automatically update as more case data becomes availible
+
+For any questions please contact: Christopher LeBoa (cleboa@stanford.edu)
+
+**Things to add**
+- mortality rate by country  -- done 
+- add country name to table if > 50 cases 
+- add # cases to str glue cumulative graph -- done
+- sizing of leaflet dots -- ask bill 
+- change C0v-19 by country to a line graph -- done
+- # of new countries reporting cases per day -- done 
+
+
