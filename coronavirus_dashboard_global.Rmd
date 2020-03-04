@@ -82,7 +82,13 @@ country_recode <-
     .default = "Other"
   )
 
-
+china_recode <- 
+  c(
+    "Mainland China" = "China",
+    "Hong Kong" = "China",
+    # "Taiwan" = "China",
+    .default = "Other"
+  )
 
 
 ```
@@ -189,8 +195,8 @@ leaflet() %>%
     # lng = Long,
     # lat = Lat,
     radius = ~ 1500 * sqrt(cases),
-    color = "red",
-    weight = 2,
+    color = "black",
+    weight = 1,
     fillColor = "red",
     fillOpacity = 0.6,
     label = 

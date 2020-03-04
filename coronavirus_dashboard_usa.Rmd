@@ -233,8 +233,10 @@ leaflet() %>%
         if_else(!is.na(city), city, ""),
         ", ",
         if_else(!is.na(state), state, ""),
-        " ", country,
-        ": ", cases,
+        " ",
+        country,
+        ": ",
+        cases,
         if_else(cases == 1, " case", " cases")),
 
   )
