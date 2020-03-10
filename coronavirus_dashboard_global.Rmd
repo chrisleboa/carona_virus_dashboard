@@ -187,28 +187,38 @@ countries <- read_sf(file_location_countries)
 
 
 
-
 leaflet() %>% 
   addProviderTiles(providers$CartoDB.Positron) %>% 
-  addCircles(
-    data = carona_data_totals, 
-    # lng = Long,
-    # lat = Lat,
-    radius = ~ 1500 * sqrt(cases),
+  addCircleMarkers(
+    data = carona_data_totals,
+    radius = ~ 2 * sqrt(cases),
     color = "black",
     weight = 1,
     fillColor = "red",
     fillOpacity = 0.6,
     label = 
       ~ str_c(
-        if_else(!is.na(province), province, ""),
-        " ", country,
+        if_else(!is.na(province), province, country),
         ": ", cases,
         if_else(cases == 1, " case", " cases")),
-    
+    options = markerOptions(mag = ~cases),
+    clusterOptions = markerClusterOptions(
+      iconCreateFunction=JS("function (cluster) {    
+    var markers = cluster.getAllChildMarkers();
+    var sum = 0; 
+    for (i = 0; i < markers.length; i++) {
+      sum += Number(markers[i].options.mag);
+//      sum += 1;
+    }
+    return new L.DivIcon({ html: '<div><span>' + sum + '</span></div>', className: 'marker-cluster marker-cluster-medium', iconSize: new L.Point(40,40)});
+  }")
+    )
   )
 
-summary(carona_data$province)
+
+
+
+
 
 ```
 
@@ -262,9 +272,10 @@ carona_data_by_country_date <-
 
 #Total cases by date plot
 carona_data_by_date %>%
-  pivot_longer(cols = c(cases, deaths, recovered, active_cases),
-               names_to = "case_type",
-               values_to = "number"
+  pivot_longer(
+    cols = c(cases, deaths, recovered, active_cases),
+    names_to = "case_type",
+    values_to = "number"
   ) %>%
   mutate(case_type = recode(case_type, !!! vars_cases_recode)) %>%  
   ggplot(aes(x = date, y = number, color = case_type)) +

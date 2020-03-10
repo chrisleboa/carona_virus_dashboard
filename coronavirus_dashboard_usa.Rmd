@@ -25,6 +25,8 @@ url_cases <- "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/c
 url_deaths <- "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Deaths.csv"
 url_recovered <- "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Recovered.csv"
 
+santa_clara_css_selector <- "#MSOZoneCell_WebPartctl00_m_g_9e09856a_8964_4086_ae06_664a315a9446 > table"
+
 
 #Rename Table 
 
